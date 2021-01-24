@@ -1,0 +1,32 @@
+
+{
+  "port": 8080,
+  "fah":
+  {
+    "clients":
+    [
+      {
+        "name": "localhost",
+        "ip": "localhost",
+        "port": 30330,
+        "pwd": ""
+      }
+    ]
+  },
+
+  "boinc":
+  {
+    "boinccmd": "/usr/bin/boinccmd",
+    "refresh": 10,
+    "clients":
+    [
+      {
+        "name": "localhost",
+        "ip": "localhost",
+        "port": 31416,
+        "pwd": "",
+        "refresh": 10
+      }
+    ]
+  }
+}
