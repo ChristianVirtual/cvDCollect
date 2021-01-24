@@ -21,7 +21,7 @@
 
         {{range .FAHClients}}
         <tr>
-            <td><input type="submit" name="updateRequest" value="{{.Name}}" /> </td>
+            <td> {{.Name}} </td>
             {{if .ConnectionError}}<td>{{.ConnectionError}}</td>{{else}}<td></td>{{end}}
             <td></td>
             <td></td>
