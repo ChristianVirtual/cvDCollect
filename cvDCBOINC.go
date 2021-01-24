@@ -230,42 +230,6 @@ type ClientStateReply struct {
 	} `xml:"client_state"`
 }
 
-/*func findProjectByUrl(result *Result, projects []Project) *Project {
-	for _, project := range projects {
-		if project.MasterUrl == result.ProjectUrl {
-			return &project
-		}
-	}
-
-	return nil
-}*/
-
-/*func findWUbyName(unitname string, units []WorkUnit) *WorkUnit {
-	unitname = string(unitname[0:strings.LastIndex(unitname, "_")])
-	for _, wu := range units {
-		//fmt.Printf("Comparing %s == %s\n", unitname, wu.Name)
-		if wu.Name == unitname {
-			return &wu
-		}
-	}
-
-	return nil
-}
-*/
-
-/* func countTasksOfProject(project *Project, results Results) int {
-
-	count := 0
-	for _, result := range results {
-		if result.ProjectUrl == project.MasterUrl && result.Activetask.State == 1 {
-			count++
-		}
-	}
-
-	return count
-}
-*/
-
 //
 //
 //
@@ -307,12 +271,12 @@ func convertResultToDHMS(result *Result) {
 }
 
 //
-// sendClient
+// sendBoincClient
 // Parameter:	client	management object for the connected client
 //				object 	what data object will be send
 // Result:		error 	error information or nil in case of success
 //
-func sendClient(client *BoincClient, object interface{}) error {
+func sendBoincClient(client *BoincClient, object interface{}) error {
 	enc, err := xml.MarshalIndent(object, "> ", "  ")
 	if err != nil {
 		fmt.Errorf("Error marshaling: %v\n", err)
@@ -324,12 +288,12 @@ func sendClient(client *BoincClient, object interface{}) error {
 }
 
 //
-// recvClient
+// recvBoincClient
 // Parameter:	client	management object for the connected client
 //				object  data object will be received
 // Result:		none
 //
-func recvClient(client *BoincClient, object interface{}) {
+func recvBoincClient(client *BoincClient, object interface{}) {
 	message, _ := bufio.NewReader(client.connection).ReadString(0x03)
 	if object != nil {
 		if client.Debug == true {
@@ -364,16 +328,16 @@ func connectBoincClient(client *BoincClient) {
 			client.stopLoop = false
 			passkey := client.Pwd
 			authMsg := &auth1{}
-			err = sendClient(client, authMsg)
+			err = sendBoincClient(client, authMsg)
 			if err == nil {
 				nonceMsg := &nonce{}
-				recvClient(client, nonceMsg)
+				recvBoincClient(client, nonceMsg)
 				password := nonceMsg.Nonce + passkey
 				calculated := md5.Sum([]byte(password))
 				var calculated2 = calculated[:]
-				err = sendClient(client, &auth2{NonceHash: hex.EncodeToString(calculated2)})
+				err = sendBoincClient(client, &auth2{NonceHash: hex.EncodeToString(calculated2)})
 				if err == nil {
-					recvClient(client, nil)
+					recvBoincClient(client, nil)
 				}
 			}
 		}
@@ -399,9 +363,9 @@ func loadBoincStatusForClient(client *BoincClient) {
 
 		state := GetState{}
 		client.ClientStateReply = ClientStateReply{}
-		err := sendClient(client, &state)
+		err := sendBoincClient(client, &state)
 		if err == nil {
-			recvClient(client, &client.ClientStateReply)
+			recvBoincClient(client, &client.ClientStateReply)
 
 			sort.Sort(client.ClientStateReply.ClientState.Results)
 

@@ -34,7 +34,7 @@ type BOINCConfig struct {
 }
 
 type FAHConfig struct {
-	Refresh int8        `json:"refresh"`
+	Refresh float64     `json:"refresh"`
 	Clients []FAHClient `json:"clients"`
 }
 
@@ -72,9 +72,13 @@ type FAHClient struct {
 	Ip              string `json:"ip"`
 	Port            int    `json:"port"`
 	Pwd             string `json:"pwd"`
+	Debug           bool   `json:"debug"`
+	Refresh         int8   `json:"refresh"`
 	stopLoop        bool
 	connection      net.Conn
-	connectionError error
+	ConnectionError error
+	Slots           Slots
+	Units           Units
 }
 
 //
@@ -89,7 +93,7 @@ func boincHandler(w http.ResponseWriter, r *http.Request) {
 
 	outputDefaultHeader(w, r)
 
-	clienttmp, err := template.ParseFiles("html/cvDCollector_temp.html")
+	clienttmp, err := template.ParseFiles("html/cvDCollector_boinc.html")
 	if err != nil {
 		log.Print(err)
 	}
@@ -105,13 +109,20 @@ func boincHandler(w http.ResponseWriter, r *http.Request) {
 		return dcClients.BoincWUList[i].WUName < dcClients.BoincWUList[j].WUName
 	})
 
+	WUmin := ""
+	WUmax := ""
+	len := len(dcClients.BoincWUList)
+	if len > 0 {
+		WUmin = dcClients.BoincWUList[0].WUName
+		WUmax = dcClients.BoincWUList[len-1].WUName
+	}
 	data := struct {
 		WUMin        string
 		WUMax        string
 		BoincClients []BoincClient
 	}{
-		WUMin:        dcClients.BoincWUList[0].WUName,
-		WUMax:        dcClients.BoincWUList[len(dcClients.BoincWUList)-1].WUName,
+		WUMin:        WUmin,
+		WUMax:        WUmax,
 		BoincClients: dcClients.BOINCConfig.Clients,
 	}
 
@@ -119,13 +130,31 @@ func boincHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		_, _ = fmt.Printf("error %s", err)
 	}
-	//		check(err)
+}
 
-	//		_, _ = fmt.Fprintf(w, "Results %d<br>", len(client.clientStateReply.ClientState.Results))
+//
+// fahHandler URL handler
+//
+func fahHandler(w http.ResponseWriter, r *http.Request) {
+	//	clientName := r.URL.Path[len("/fah/"):]
 
-	//		if client.connectionError != nil {
-	//			_, _ = fmt.Fprintf(w, "error=%s<br>", client.connectionError)
-	//		}
+	outputDefaultHeader(w, r)
+
+	clienttmp, err := template.ParseFiles("html/cvDCollector_fah.html")
+	if err != nil {
+		log.Print(err)
+	}
+
+	data := struct {
+		FAHClients []FAHClient
+	}{
+		FAHClients: dcClients.FAHConfig.Clients,
+	}
+
+	err = clienttmp.Execute(w, data)
+	if err != nil {
+		_, _ = fmt.Printf("error %s", err)
+	}
 }
 
 //
@@ -280,6 +309,7 @@ func main() {
 
 	// establish the various handlers
 	http.HandleFunc("/boinc/", boincHandler)   // refresh clients
+	http.HandleFunc("/fah/", fahHandler)       // refresh clients
 	http.HandleFunc("/update/", updateHandler) // update API via POST
 	http.HandleFunc("/reload/", reloadHandler) // reload overall config and restart communication
 
