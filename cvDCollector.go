@@ -20,6 +20,7 @@ import (
 //
 
 type DCClients struct {
+	Port        int         `json:"port"`
 	BOINCConfig BOINCConfig `json:"boinc"`
 	FAHConfig   FAHConfig   `json:"fah"`
 	// internal updated attributes
@@ -283,5 +284,6 @@ func main() {
 	http.HandleFunc("/reload/", reloadHandler) // reload overall config and restart communication
 
 	// start the web server
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	addr := fmt.Sprintf(":%d", dcClients.Port)
+	log.Fatal(http.ListenAndServe(addr, nil))
 }
