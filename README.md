@@ -8,9 +8,21 @@ The goal was to reduce the need to start multiple instances of the respective fr
 
 The source code and be regular downloaded from GitHub or simply installed via
 
+```
 go run github.com/ChristianVirtual/cvDCollect/
+```
 
 You could need to provide a version of the config.json file containing the names, IP address or hostname, port and remote password. Then the collector is staring this config file will be read and used to start the data collection.
 
-From your web browser of choice you can the call localhost:8080/boinc/all to show the prepared web page.
+From your web browser of choice you can the call 
+
+```
+localhost:8080/boinc/all
+```
+or
+```
+localhost:8080/fah/all
+```
+
+to show the prepared web page.
 
