@@ -1,0 +1,1 @@
+go build -o cvDCCollect cvDCollect.go cvDCBOINC.go cvDCFAH.go
