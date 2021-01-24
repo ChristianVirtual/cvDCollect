@@ -354,6 +354,9 @@ func connectBoincClient(client *BoincClient) {
 	if client.connection == nil {
 		var err error
 
+		if client.Refresh < 1 {
+			client.Refresh = 10
+		}
 		fmt.Printf("open connection to %s\n", adr)
 		client.connection, err = net.DialTimeout("tcp", adr, 5*time.Second)
 
