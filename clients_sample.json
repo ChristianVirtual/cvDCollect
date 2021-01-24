@@ -1,0 +1,81 @@
+
+{
+  "fah":
+  {
+    "clients":
+    [
+      {
+        "name": "blackbox",
+        "ip": "",
+        "port": 30330,
+        "pwd": ""
+      }
+    ]
+  },
+
+  "boinc":
+  {
+    "boinccmd": "/usr/bin/boinccmd",
+    "refresh": 10,
+    "clients":
+    [
+      {
+        "name": "raspberrypiX",
+        "ip": "192.168.88.50",
+        "port": 31416,
+        "pwd": "",
+        "refresh": 10
+      },
+      {
+        "name": "raspberrypiXI",
+        "ip": "192.168.66.101",
+        "port": 31416,
+        "pwd": "remote",
+        "refresh": 10
+      },
+      {
+        "name": "raspberrypiXX",
+        "ip": "192.168.88.54",
+        "port": 31416,
+        "pwd": "remote",
+        "refresh": 10
+      },
+      {
+        "name": "raspberrypiXXI",
+        "ip": "192.168.88.55",
+        "port": 31416,
+        "pwd": "remote",
+        "refresh": 10
+      },
+      {
+        "name": "raspberrypiXXII",
+        "ip": "192.168.88.56",
+        "port": 31416,
+        "pwd": "remote",
+        "refresh": 10
+      },
+      {
+        "name": "raspberrypiXXIII",
+        "ip": "192.168.88.57",
+        "port": 31416,
+        "pwd": "remote",
+        "refresh": 10
+      },
+      {
+        "name": "raspberrypiXXX",
+        "ip": "192.168.88.58",
+        "port": 31416,
+        "pwd": "remote",
+        "refresh": 10
+      },
+      {
+        "name": "raspberrypiXXXI",
+        "ip": "192.168.88.59",
+        "port": 31416,
+        "pwd": "remote",
+        "refresh": 10
+      }
+    ]
+
+  }
+}
