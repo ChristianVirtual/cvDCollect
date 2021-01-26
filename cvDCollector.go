@@ -154,8 +154,8 @@ func boincHandler(w http.ResponseWriter, r *http.Request) {
 		return dcClients.BoincWUList[i].WUName < dcClients.BoincWUList[j].WUName
 	})
 
-	WUmin := ""
-	WUmax := ""
+	WUmin := "?"
+	WUmax := "?"
 	len := len(dcClients.BoincWUList)
 	if len > 0 {
 		WUmin = dcClients.BoincWUList[0].WUName

@@ -26,3 +26,10 @@ localhost:8080/fah/all
 
 to show the prepared web page.
 
+The more classical way would be to clone the repo, make all in one folder, create the clients.json file and combile with 
+```
+go build -o cvDC *.go
+
+./cvDC
+```
+
