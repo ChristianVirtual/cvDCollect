@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"sort"
+	"time"
 )
 
 //
@@ -20,11 +21,17 @@ import (
 //
 
 type DCClients struct {
-	Port        int         `json:"port"`
+	ServerPort  int         `json:"port"`
 	BOINCConfig BOINCConfig `json:"boinc"`
 	FAHConfig   FAHConfig   `json:"fah"`
 	// internal updated attributes
 	BoincWUList []BoincWUReference
+}
+
+//
+// make a DCConfig interface
+//
+type DCConfig interface {
 }
 
 type BOINCConfig struct {
@@ -39,20 +46,43 @@ type FAHConfig struct {
 }
 
 //
+// make a Client interface
+//
+
+type Clients []Client
+type Client interface {
+	flavor()     // ask for what flavor this client is for (FAH or BOINC)
+	connect()    // connect to the client
+	send()       // send a command to the client
+	receive()    // receive data from the client
+	disconnect() // disconnect from the client
+	isConnected()
+}
+
+//
+// DCClient
+//
+// Common definitions for all DC clients; used via "faked" inheritance
+//
+type DCClient struct {
+	Name    string `json:"name"`
+	Ip      string `json:"ip"`
+	Port    int    `json:"port"`
+	Pwd     string `json:"pwd"`
+	Debug   bool   `json:"debug"`
+	Refresh int8   `json:"refresh"`
+
+	connection      net.Conn
+	ConnectionError error
+}
+
+//
 // BoincClient
 //
 // Structure to store the values relevant to manage one BOINC client
 //
 type BoincClient struct {
-	Name             string `json:"name"`
-	Ip               string `json:"ip"`
-	Port             int    `json:"port"`
-	Pwd              string `json:"pwd"`
-	Debug            bool   `json:"debug"`
-	Refresh          int8   `json:"refresh"`
-	stopLoop         bool
-	connection       net.Conn
-	ConnectionError  error
+	DCClient         // "fake" inheritance
 	ClientStateReply ClientStateReply
 }
 
@@ -66,24 +96,39 @@ type BoincWUReference struct {
 //
 // Structure to store the values relevant to manage one FAH client
 //
-
 type FAHClient struct {
-	Name            string `json:"name"`
-	Ip              string `json:"ip"`
-	Port            int    `json:"port"`
-	Pwd             string `json:"pwd"`
-	Debug           bool   `json:"debug"`
-	Refresh         int8   `json:"refresh"`
-	stopLoop        bool
-	connection      net.Conn
-	ConnectionError error
-	Slots           Slots
-	Units           Units
+	DCClient // "fake" inheritance
+	Slots    Slots
+	Units    Units
 }
 
 //
 // Global list for all DC clients
 var dcClients DCClients
+
+func loadStats(clients *Clients) {
+	// loop forever (in background) and fetch disconnected clients for reconnect
+	for true {
+		// go over the list of clients
+		for idx := range dcClients.FAHConfig.Clients {
+			// get the reference
+			var client = &dcClients.FAHConfig.Clients[idx]
+			// if we have no connection yet
+			if client.isConnected() == false {
+				// then open the connection
+				client.connect()
+				fmt.Printf("%s client %s (%s)\n", client.flavor(), client.Name, client.Ip)
+
+				// and if successful start loading the data in background
+				if client.isConnected() == true {
+					go client.loadState()
+				}
+			}
+		}
+		// wait a period of time and try the client list again to connect those not yet connected
+		time.Sleep(20 * time.Second)
+	}
+}
 
 //
 // boincHandler URL handler
@@ -93,7 +138,7 @@ func boincHandler(w http.ResponseWriter, r *http.Request) {
 
 	outputDefaultHeader(w, r)
 
-	clienttmp, err := template.ParseFiles("html/cvDCollector_boinc.html")
+	clienttemplate, err := template.ParseFiles("html/cvDCollector_boinc.html")
 	if err != nil {
 		log.Print(err)
 	}
@@ -126,7 +171,7 @@ func boincHandler(w http.ResponseWriter, r *http.Request) {
 		BoincClients: dcClients.BOINCConfig.Clients,
 	}
 
-	err = clienttmp.Execute(w, data)
+	err = clienttemplate.Execute(w, data)
 	if err != nil {
 		_, _ = fmt.Printf("error %s", err)
 	}
@@ -216,7 +261,8 @@ func reloadHandler(w http.ResponseWriter, r *http.Request) {
 				client.connection = nil
 			}
 
-			connectBoincClient(client)
+			client.connect()
+			//connectBoincClient(client)
 			fmt.Printf("client %s (%s)\n", client.Name, client.Ip)
 
 			//			if client.connection != nil {
@@ -294,9 +340,12 @@ func main() {
 
 	fmt.Printf("%d FAH clients in list\n", len(dcClients.FAHConfig.Clients))
 	go loadFahStats()
+	//go loadStats(&dcClients.FAHConfig.Clients)
+	//	loadClientsState(&dcClients.FAHConfig.Clients)
 
 	fmt.Printf("%d BOINC clients in list\n", len(dcClients.BOINCConfig.Clients))
 	go loadBoincStats()
+	//	loadClientsState(&dcClients.BOINCConfig.Clients)
 
 	fscss := http.FileServer(http.Dir("css"))
 	http.Handle("/css/", http.StripPrefix("/css/", fscss))
@@ -314,6 +363,6 @@ func main() {
 	http.HandleFunc("/reload/", reloadHandler) // reload overall config and restart communication
 
 	// start the web server
-	addr := fmt.Sprintf(":%d", dcClients.Port)
+	addr := fmt.Sprintf(":%d", dcClients.ServerPort)
 	log.Fatal(http.ListenAndServe(addr, nil))
 }

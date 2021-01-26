@@ -123,7 +123,7 @@ type AppVersion struct {
 	AppName    string   `xml:"app_name"`
 	VersionNum int      `xml:"version_num"`
 	Platform   string   `xml:"platform"`
-	AvgNcpus   int      `xml:"avg_ncpus"`
+	AvgNcpus   float64  `xml:"avg_ncpus"`
 	Flops      float64  `xml:"flops"`
 	APIVersion string   `xml:"api_version"`
 }
@@ -203,8 +203,8 @@ type simpleGuiInfo struct {
 type simpleGuiInfoReply struct {
 	XMLName       xml.Name `xml:"boinc_gui_rpc_reply"`
 	SimpleGuiInfo struct {
-		Projects []Project `xml:"project"`
-		Results  Results   `xml:"result"`
+		Projects Projects `xml:"project"`
+		Results  Results  `xml:"result"`
 	} `xml:"simple_gui_info"`
 }
 
@@ -222,11 +222,11 @@ type ClientStateReply struct {
 		NetStats  NetStats  `xml:"net_stats"`
 		TimeStats TimeStats `xml:"time_stats"`
 		// Coprocs
-		Projects []Project `xml:"project"`
-		Apps     []App     `xml:"app"`
-		//AppVersions []AppVersion `xml:"app_version"`
-		WorkUnits []WorkUnit `xml:"workunit"`
-		Results   Results    `xml:"result"`
+		Projects    []Project    `xml:"project"`
+		Apps        []App        `xml:"app"`
+		AppVersions []AppVersion `xml:"app_version"`
+		WorkUnits   []WorkUnit   `xml:"workunit"`
+		Results     Results      `xml:"result"`
 	} `xml:"client_state"`
 }
 
@@ -267,87 +267,137 @@ func convertToDHMS(secFloat float64) (day uint8, hour uint8, min uint8, sec uint
 //
 func convertResultToDHMS(result *Result) {
 	days, hours, mins, secs := convertToDHMS(result.EstimatedTimeRemaining)
-	result.EstimatedTimeRemainingAsString = fmt.Sprintf("%dd %dh:%dm:%ds", days, hours, mins, secs)
+	if days == 0 {
+		if hours == 0 {
+			if mins == 0 {
+				result.EstimatedTimeRemainingAsString = fmt.Sprintf("%ds", secs)
+			} else {
+				result.EstimatedTimeRemainingAsString = fmt.Sprintf("%dm:%ds", mins, secs)
+			}
+		} else {
+			result.EstimatedTimeRemainingAsString = fmt.Sprintf("%dh:%dm:%ds", hours, mins, secs)
+		}
+	} else {
+		result.EstimatedTimeRemainingAsString = fmt.Sprintf("%dd %dh:%dm:%ds", days, hours, mins, secs)
+	}
 }
 
 //
-// sendBoincClient
-// Parameter:	client	management object for the connected client
-//				object 	what data object will be send
+//
+//
+func (client *BoincClient) flavor() string {
+	return "BOINC"
+}
+
+//
+// method connect()
+// Parameter:	none
 // Result:		error 	error information or nil in case of success
 //
-func sendBoincClient(client *BoincClient, object interface{}) error {
-	enc, err := xml.MarshalIndent(object, "> ", "  ")
-	if err != nil {
-		fmt.Errorf("Error marshaling: %v\n", err)
-		return err
+
+func (client *BoincClient) connect() error {
+	var err error = nil
+
+	if client.Ip == "" || client.Port < 1024 {
+		return fmt.Errorf("invalid parameter for #{client.style()}")
 	}
-	enc2 := append(enc, 0x03)
-	fmt.Fprintf(client.connection, "%s", enc2)
-	return nil
-}
-
-//
-// recvBoincClient
-// Parameter:	client	management object for the connected client
-//				object  data object will be received
-// Result:		none
-//
-func recvBoincClient(client *BoincClient, object interface{}) {
-	message, _ := bufio.NewReader(client.connection).ReadString(0x03)
-	if object != nil {
-		if client.Debug == true {
-			_, _ = fmt.Printf("%s\n", message)
-		}
-		err := xml.Unmarshal([]byte(message), object)
-		if err != nil {
-			_ = fmt.Errorf("Error unmarshaling: %v\n", err)
-		}
-	}
-}
-
-//
-//
-//
-
-func connectBoincClient(client *BoincClient) {
 
 	adr := fmt.Sprintf("%s:%d", client.Ip, client.Port)
 
 	// if we have no connection, then try to connect
-	if client.connection == nil {
-		var err error
+	if client.connection != nil {
+		return nil
+	}
 
-		if client.Refresh < 1 {
-			client.Refresh = 10
-		}
-		fmt.Printf("open connection to %s\n", adr)
-		client.connection, err = net.DialTimeout("tcp", adr, 5*time.Second)
+	if client.Refresh < 1 {
+		client.Refresh = 10
+	}
+	fmt.Printf("open connection to %s\n", adr)
+	client.connection, err = net.DialTimeout("tcp", adr, 5*time.Second)
 
+	if err != nil {
+		client.ConnectionError = err
+		return err
+	}
+
+	passkey := client.Pwd
+	authMsg := &auth1{}
+	err = client.send(authMsg)
+	if err == nil {
+		nonceMsg := &nonce{}
+		_ = client.receive(nonceMsg)
+		password := nonceMsg.Nonce + passkey
+		calculated := md5.Sum([]byte(password))
+		var calculated2 = calculated[:]
+		err = client.send(&auth2{NonceHash: hex.EncodeToString(calculated2)})
 		if err == nil {
-			client.stopLoop = false
-			passkey := client.Pwd
-			authMsg := &auth1{}
-			err = sendBoincClient(client, authMsg)
-			if err == nil {
-				nonceMsg := &nonce{}
-				recvBoincClient(client, nonceMsg)
-				password := nonceMsg.Nonce + passkey
-				calculated := md5.Sum([]byte(password))
-				var calculated2 = calculated[:]
-				err = sendBoincClient(client, &auth2{NonceHash: hex.EncodeToString(calculated2)})
-				if err == nil {
-					recvBoincClient(client, nil)
-				}
-			}
-		}
-
-		if err != nil {
-			client.connection = nil
-			client.ConnectionError = err
-			fmt.Printf("error: %s\n", err)
+			_ = client.receive(nil)
 		}
 	}
+
+	if err != nil {
+		err = client.disconnect()
+	}
+
+	return err
+}
+
+func (client *BoincClient) getConnection() *net.Conn {
+	return &client.connection
+}
+
+func (client *BoincClient) isConnected() bool {
+	return client.connection != nil
+}
+
+func (client *BoincClient) disconnect() error {
+	err := client.connection.Close()
+	client.connection = nil
+	client.ConnectionError = err
+	return err
+}
+
+//
+// method send
+// Parameter:	object 	what data object will be send
+// Result:		error 	error information or nil in case of success
+//
+
+func (client *BoincClient) send(object interface{}) error {
+	enc, err := xml.MarshalIndent(object, "> ", "  ")
+	if err != nil {
+		_ = fmt.Errorf("Error marshaling: %v\n", err)
+		return err
+	} else {
+		// append the delimiter at the end as asked by the BOINC definition
+		enc2 := append(enc, 0x03)
+		_, err := fmt.Fprintf(client.connection, "%s", enc2)
+		if err != nil {
+			_ = fmt.Errorf("Error writing data to client: %v\n", err)
+		}
+	}
+	return err
+}
+
+//
+// method receive
+// Parameter:	object  data object will be received
+// Result:		none
+//
+func (client *BoincClient) receive(object interface{}) error {
+	message, _ := bufio.NewReader(client.connection).ReadString(0x03)
+	var err error = nil
+	if object != nil {
+		if client.Debug == true {
+			_, _ = fmt.Printf("%s\n", message)
+		}
+		err = xml.Unmarshal([]byte(message), object)
+		if err != nil {
+			err = fmt.Errorf("Error unmarshaling: %v\n", err)
+		}
+	}
+
+	return err
 }
 
 //
@@ -355,7 +405,7 @@ func connectBoincClient(client *BoincClient) {
 //
 // loop for one BOINC client to load the actual state and fill internal structure
 //
-func loadBoincStatusForClient(client *BoincClient) {
+func (client *BoincClient) loadState() {
 	for true {
 		if client.connection == nil {
 			return
@@ -363,10 +413,12 @@ func loadBoincStatusForClient(client *BoincClient) {
 
 		state := GetState{}
 		client.ClientStateReply = ClientStateReply{}
-		err := sendBoincClient(client, &state)
+		err := client.send(&state)
 		if err == nil {
-			recvBoincClient(client, &client.ClientStateReply)
-
+			err = client.receive(&client.ClientStateReply)
+			if err != nil {
+				fmt.Printf("%s\n", err)
+			}
 			sort.Sort(client.ClientStateReply.ClientState.Results)
 
 			for idx := range client.ClientStateReply.ClientState.Results {
@@ -375,18 +427,9 @@ func loadBoincStatusForClient(client *BoincClient) {
 				convertResultToDHMS(result)
 				result.IsFinished = result.EstimatedTimeRemaining == 0
 			}
-		} else {
-			client.stopLoop = true
 		}
 
 		time.Sleep(time.Duration(client.Refresh) * time.Second)
-
-		if client.stopLoop == true {
-			_ = client.connection.Close()
-			client.connection = nil
-			client.stopLoop = false
-			return
-		}
 	}
 }
 
@@ -397,27 +440,25 @@ func loadBoincStatusForClient(client *BoincClient) {
 //
 func loadBoincStats() {
 
-	// loop forever (in background)
+	// loop forever (in background) and fetch disconnected clients for reconnect
 	for true {
 		// go over the list of clients
 		for idx := range dcClients.BOINCConfig.Clients {
 			// get the reference
 			var client = &dcClients.BOINCConfig.Clients[idx]
-
 			// if we have no connection yet
-			if client.connection == nil {
+			if client.isConnected() == false {
 				// then open the connection
-				connectBoincClient(client)
-				fmt.Printf("client %s (%s)\n", client.Name, client.Ip)
+				client.connect()
+				fmt.Printf("%s client %s (%s)\n", client.flavor(), client.Name, client.Ip)
 
-				// and if successful start loading the background data
-				if client.connection != nil {
-					go loadBoincStatusForClient(client)
+				// and if successful start loading the data in background
+				if client.isConnected() == true {
+					go client.loadState()
 				}
 			}
 		}
-
-		// wait a minute and try the client list again
-		time.Sleep(60 * time.Second)
+		// wait a period of time and try the client list again to connect those not yet connected
+		time.Sleep(20 * time.Second)
 	}
 }

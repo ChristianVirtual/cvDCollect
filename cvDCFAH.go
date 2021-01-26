@@ -55,27 +55,91 @@ type Unit struct {
 	BaseCredit     string `json:"basecredit"`
 }
 
+var slotinfo = "slot-info"
+var queueinfo = "queue-info"
+
+func (client *FAHClient) flavor() string {
+	return "FAH"
+}
+
+//
+// connectFahClient
+//
+// Open a socket to the FAH Client given in parameter
+//
+
+func (client *FAHClient) connect() error {
+	var err error = nil
+
+	if client.Ip == "" || client.Port < 1024 {
+		return fmt.Errorf("invalid parameter for #{client.style()}")
+	}
+
+	adr := fmt.Sprintf("%s:%d", client.Ip, client.Port)
+
+	// if we have no connection, then try to connect
+	if client.connection != nil {
+		return err
+	}
+
+	fmt.Printf("open connection to %s\n", adr)
+	client.connection, err = net.DialTimeout("tcp", adr, 10*time.Second)
+
+	if err != nil {
+		client.ConnectionError = err
+		return err
+	}
+
+	_ = client.receive(nil) // read the banner from the FAH Client
+
+	authMsg := fmt.Sprintf("auth %s\n", client.Pwd)
+	err = client.send(authMsg)
+	if err == nil {
+		_ = client.receive(nil)
+	}
+	if err != nil {
+		err = client.disconnect()
+	}
+
+	return err
+}
+
+func (client *FAHClient) getConnection() *net.Conn {
+	return &client.connection
+}
+
+func (client *FAHClient) isConnected() bool {
+	return client.connection != nil
+}
+
+func (client *FAHClient) disconnect() error {
+	err := client.connection.Close()
+	client.connection = nil
+	client.ConnectionError = err
+	return err
+}
+
 //
 // sendBoincClient
 // Parameter:	client	management object for the connected client
 //				object 	what data object will be send
 // Result:		error 	error information or nil in case of success
 //
-func sendFahClient(client *FAHClient, cmd string) error {
+func (client *FAHClient) send(object interface{}) error {
 	if client.Debug == true {
-		fmt.Printf("send: %s\n", cmd)
+		fmt.Printf("%s", object)
 	}
-	fmt.Fprintf(client.connection, "%s\n", cmd)
-	return nil
+	_, err := fmt.Fprintf(client.connection, "%s\n", object)
+	return err
 }
 
 //
-// recvBoincClient
+// method receive
 // Parameter:	client	management object for the connected client
 //				object  data object will be received
 // Result:		none
 //
-func recvFahClient(client *FAHClient, object interface{}) {
+func (client *FAHClient) receive(object interface{}) error {
 	message, _ := bufio.NewReader(client.connection).ReadString('>')
 
 	msg := PyPON2JSON(message)
@@ -83,13 +147,16 @@ func recvFahClient(client *FAHClient, object interface{}) {
 	if client.Debug == true {
 		_, _ = fmt.Printf("%q\n", msg)
 	}
+	var err error = nil
 
 	if object != nil {
-		err := json.Unmarshal([]byte(msg), object)
+		err = json.Unmarshal([]byte(msg), object)
 		if err != nil {
-			_ = fmt.Errorf("Error unmarshaling: %v\n", err)
+			err = fmt.Errorf("Error unmarshaling: %v\n", err)
 		}
 	}
+
+	return err
 }
 
 //
@@ -110,75 +177,27 @@ func PyPON2JSON(message string) string {
 }
 
 //
-// connectFahClient
-//
-// Open a socket to the FAH Client given in parameter
-//
-
-func connectFahClient(client *FAHClient) {
-	var err error
-
-	if client.Ip == "" || client.Port < 1024 {
-		return
-	}
-
-	adr := fmt.Sprintf("%s:%d", client.Ip, client.Port)
-
-	// if we have no connection, then try to connect
-	if client.connection == nil {
-		fmt.Printf("open connection to %s\n", adr)
-		client.connection, err = net.DialTimeout("tcp", adr, 10*time.Second)
-
-		recvFahClient(client, nil)
-
-		client.stopLoop = false
-
-		authMsg := fmt.Sprintf("auth %s\n", client.Pwd)
-		err = sendFahClient(client, authMsg)
-		if err == nil {
-			recvFahClient(client, nil)
-		} else {
-			client.connection = nil
-			client.ConnectionError = err
-			fmt.Printf("error: %s\n", err)
-		}
-	}
-}
-
 //
 //
-//
-func loadFahStatusForClient(client *FAHClient) {
-
-	client.stopLoop = true
+func (client *FAHClient) loadState() {
 
 	for true {
 		if client.connection == nil {
 			return
 		}
 
-		err := sendFahClient(client, "slot-info\n")
+		err := client.send(slotinfo)
 		if err == nil {
-			recvFahClient(client, &client.Slots)
-		} else {
-			client.stopLoop = true
+			_ = client.receive(&client.Slots)
 		}
 
-		err = sendFahClient(client, "queue-info\n")
+		err = client.send(queueinfo)
 		if err == nil {
-			recvFahClient(client, &client.Units)
-		} else {
-			client.stopLoop = true
+			_ = client.receive(&client.Units)
 		}
 
 		time.Sleep(time.Duration(client.Refresh) * time.Second)
 
-		if client.stopLoop == true {
-			_ = client.connection.Close()
-			client.connection = nil
-			client.stopLoop = false
-			return
-		}
 	}
 }
 
@@ -189,24 +208,25 @@ func loadFahStatusForClient(client *FAHClient) {
 //
 func loadFahStats() {
 
-	// loop forever (in background)
+	// loop forever (in background) and fetch disconnected clients for reconnect
 	for true {
 		// go over the list of clients
 		for idx := range dcClients.FAHConfig.Clients {
 			// get the reference
 			var client = &dcClients.FAHConfig.Clients[idx]
 			// if we have no connection yet
-			if client.connection == nil {
+			if client.isConnected() == false {
 				// then open the connection
-				connectFahClient(client)
-				fmt.Printf("client %s (%s)\n", client.Name, client.Ip)
+				client.connect()
+				fmt.Printf("%s client %s (%s)\n", client.flavor(), client.Name, client.Ip)
 
-				if client.connection != nil {
-					go loadFahStatusForClient(client)
+				// and if successful start loading the data in background
+				if client.isConnected() == true {
+					go client.loadState()
 				}
 			}
 		}
-		// wait a minute and try the client list again
+		// wait a period of time and try the client list again to connect those not yet connected
 		time.Sleep(20 * time.Second)
 	}
 }
