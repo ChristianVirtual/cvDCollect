@@ -254,8 +254,7 @@ func reloadHandler(w http.ResponseWriter, r *http.Request) {
 			var client = &dcClients.BOINCConfig.Clients[idx]
 
 			if client.connection != nil {
-				err := client.connection.Close()
-				if err != nil {
+				if err := client.connection.Close(); err != nil {
 					fmt.Printf("client %s (%s): %s\n", client.Name, client.Ip, err)
 				}
 				client.connection = nil
@@ -313,8 +312,8 @@ func loadConfig() {
 	// load the JSON file with clients and password
 	//
 	jsonFile, err := os.Open("clients.json")
-	// os.Open has an error ?
 	if err != nil {
+		// os.Open has an error ?
 		fmt.Println(err)
 		os.Exit(-1)
 	}
@@ -322,8 +321,7 @@ func loadConfig() {
 	defer jsonFile.Close()
 
 	byteValue, _ := ioutil.ReadAll(jsonFile)
-	err = json.Unmarshal(byteValue, &dcClients)
-	if err != nil {
+	if err := json.Unmarshal(byteValue, &dcClients); err != nil {
 		_, _ = fmt.Fprint(os.Stderr, "%s\n", err)
 	}
 }
@@ -339,12 +337,17 @@ func main() {
 	loadConfig()
 
 	fmt.Printf("%d FAH clients in list\n", len(dcClients.FAHConfig.Clients))
-	go loadFahStats()
+	go func() {
+		loadFahStats()
+	}()
 	//go loadStats(&dcClients.FAHConfig.Clients)
 	//	loadClientsState(&dcClients.FAHConfig.Clients)
 
 	fmt.Printf("%d BOINC clients in list\n", len(dcClients.BOINCConfig.Clients))
-	go loadBoincStats()
+	go func() {
+		loadBoincStats()
+	}()
+
 	//	loadClientsState(&dcClients.BOINCConfig.Clients)
 
 	fscss := http.FileServer(http.Dir("css"))

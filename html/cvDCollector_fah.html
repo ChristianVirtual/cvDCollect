@@ -10,37 +10,35 @@
 
 <body>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta1/dist/js/bootstrap.bundle.min.js" integrity="sha384-ygbV9kiqUc6oa4msXn9868pTtWMgiQaeYH7/t7LECLbyPA2x65Kgf80OJFdroafW" crossorigin="anonymous"></script>
-<form action="/update/" method="post">
-    <small><a href="/boinc/all">BOINC Client</a></small>
+<small><a href="/boinc/all">BOINC Client</a></small>
 
-    <table class="table table-striped table-bordered table-sm">
-        <tr><th style="width:15%">Client</th>
-            <th style="width:15%">PRCG</th>
-            <th style="width:15%">Progress</th>
-            <th style="width:15%">Status</th>
-            <th style="width:20%">Timeout</th></tr>
+<table class="table table-striped table-bordered table-sm">
+    <tr><th style="width:15%">Client</th>
+        <th style="width:15%">PRCG</th>
+        <th style="width:15%">Progress</th>
+        <th style="width:15%">Status</th>
+        <th style="width:20%">Timeout</th></tr>
 
-        {{range .FAHClients}}
-        <tr>
-            <td> {{.Name}} </td>
-            {{if .ConnectionError}}<td>{{.ConnectionError}}</td>{{else}}<td></td>{{end}}
-            <td></td>
-            <td></td>
-            <td></td>
-        </tr>
-        {{range .Units.Units}}
-        <tr style="border: 1px solid #dddddd;text-align: left; padding: 8px;font-size:8pt;">
-            <td></td>
-            <td style="">{{.Project}} ({{.Run}},{{.Clone}},{{.Gen}})</td>
-            <td>{{ .Percentdone }}</td>
-            <td>{{.State}}</td>
-            <td>{{.Timeout}}</td>
-        </tr>
-        {{end}}
+    {{range .FAHClients}}
+    <tr>
+        <td> {{.Name}} </td>
+        {{if .ConnectionError}}<td>{{.ConnectionError}}</td>{{else}}<td></td>{{end}}
+        <td></td>
+        <td></td>
+        <td></td>
+    </tr>
+    {{range .Units.Units}}
+    <tr style="border: 1px solid #dddddd;text-align: left; padding: 8px;font-size:8pt;">
+        <td></td>
+        <td style="">{{.Project}} ({{.Run}},{{.Clone}},{{.Gen}})</td>
+        <td>{{ .Percentdone }}</td>
+        <td>{{.State}}</td>
+        <td>{{.Timeout}}</td>
+    </tr>
+    {{end}}
 
-        {{end}}
-    </table>
-</form>
+    {{end}}
+</table>
 
 </body>
 </html>
