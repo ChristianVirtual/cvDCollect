@@ -42,8 +42,15 @@
     function postUpdate(clientName)
     {
         var xhr = new XMLHttpRequest();
-        var p = '/update/' + clientName
-        xhr.open('POST', p, true);
+        var params = "client=" + encodeURIComponent(clientName)
+        xhr.open('POST', '/update', true);
+        xhr.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
+        xhr.onreadystatechange = function(){
+            if(xhr.readyState == 4 && xhr.status == 200){
+                console.log("Done");
+            }
+        }
+        xhr.send(params)
         document.location.reload()
     }
 

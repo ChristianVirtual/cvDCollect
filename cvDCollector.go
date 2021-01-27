@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"sort"
@@ -121,7 +122,9 @@ func loadStats(clients *Clients) {
 
 				// and if successful start loading the data in background
 				if client.isConnected() == true {
-					go client.loadState()
+					go func() {
+						client.loadState()
+					}()
 				}
 			}
 		}
@@ -133,10 +136,10 @@ func loadStats(clients *Clients) {
 //
 // boincHandler URL handler
 //
-func boincHandler(w http.ResponseWriter, r *http.Request) {
+func boincHandler(w http.ResponseWriter, _ *http.Request) {
 	//	clientName := r.URL.Path[len("/boinc/"):]
 
-	outputDefaultHeader(w, r)
+	outputDefaultHeader(w)
 
 	clienttemplate, err := template.ParseFiles("html/cvDCollector_boinc.html")
 	if err != nil {
@@ -156,10 +159,10 @@ func boincHandler(w http.ResponseWriter, r *http.Request) {
 
 	WUmin := "?"
 	WUmax := "?"
-	len := len(dcClients.BoincWUList)
-	if len > 0 {
+	lenList := len(dcClients.BoincWUList)
+	if lenList > 0 {
 		WUmin = dcClients.BoincWUList[0].WUName
-		WUmax = dcClients.BoincWUList[len-1].WUName
+		WUmax = dcClients.BoincWUList[lenList-1].WUName
 	}
 	data := struct {
 		WUMin        string
@@ -180,10 +183,10 @@ func boincHandler(w http.ResponseWriter, r *http.Request) {
 //
 // fahHandler URL handler
 //
-func fahHandler(w http.ResponseWriter, r *http.Request) {
+func fahHandler(w http.ResponseWriter, _ *http.Request) {
 	//	clientName := r.URL.Path[len("/fah/"):]
 
-	outputDefaultHeader(w, r)
+	outputDefaultHeader(w)
 
 	clienttmp, err := template.ParseFiles("html/cvDCollector_fah.html")
 	if err != nil {
@@ -206,12 +209,19 @@ func fahHandler(w http.ResponseWriter, r *http.Request) {
 // updateHandler URL handler
 //
 func updateHandler(w http.ResponseWriter, r *http.Request) {
-	clientName := r.URL.Path[len("/update/"):]
-	//p, _ := loadPage(title)
+	// clientName := r.URL.Path[len("/update/"):]
 
-	clientName = r.FormValue("updateRequest")
+	if err := r.ParseForm(); err != nil {
+		fmt.Printf("%s\n", err)
+		return
+	}
 
-	//	outputDefaultHeader(w, r)
+	clientName, err := url.QueryUnescape(r.Form.Get("client"))
+	if err != nil {
+		fmt.Printf("%s\n", err)
+		return
+	}
+
 	switch r.Method {
 	case "POST":
 		for idx := range dcClients.BOINCConfig.Clients {
@@ -245,10 +255,8 @@ func updateHandler(w http.ResponseWriter, r *http.Request) {
 //
 func reloadHandler(w http.ResponseWriter, r *http.Request) {
 	title := r.URL.Path[len("/reload/"):]
-	//p, _ := loadPage(title)
 
-	outputDefaultHeader(w, r)
-
+	outputDefaultHeader(w)
 	if title == "boinc" || title == "all" {
 		for idx := range dcClients.BOINCConfig.Clients {
 			var client = &dcClients.BOINCConfig.Clients[idx]
@@ -257,38 +265,27 @@ func reloadHandler(w http.ResponseWriter, r *http.Request) {
 				if err := client.connection.Close(); err != nil {
 					fmt.Printf("client %s (%s): %s\n", client.Name, client.Ip, err)
 				}
-				client.connection = nil
 			}
 
-			client.connect()
-			//connectBoincClient(client)
-			fmt.Printf("client %s (%s)\n", client.Name, client.Ip)
-
-			//			if client.connection != nil {
-			//				go loadBoincStatusForClient(client)
-			//			}
+			if err := client.connect(); err != nil {
+				fmt.Printf("reload client %s (%s), error: %s\n", client.Name, client.Ip, err)
+			}
 		}
 	}
 
 	for _, client := range dcClients.BOINCConfig.Clients {
-		_, _ = fmt.Fprintf(w, "<h1>%s</h1>", client.Name)
-		_, _ = fmt.Fprintf(w, "<div>")
-		_, _ = fmt.Fprintf(w, "Results %d<br>", len(client.ClientStateReply.ClientState.Results))
+		_, _ = fmt.Fprintf(w, "<h2>%s</h2>", client.Name)
 
 		if client.ConnectionError != nil {
 			_, _ = fmt.Fprintf(w, "error=%s<br>", client.ConnectionError)
 		}
-		sort.Sort(client.ClientStateReply.ClientState.Results)
-		sort.Slice(client.ClientStateReply.ClientState.Results, func(i, j int) bool {
-			return client.ClientStateReply.ClientState.Results[i].WUName < client.ClientStateReply.ClientState.Results[j].WUName
-		})
 	}
 }
 
 //
 //
 //
-func outputDefaultHeader(w http.ResponseWriter, r *http.Request) {
+func outputDefaultHeader(w http.ResponseWriter) {
 
 	w.Header().Set("cache-control", "no-cache, must-revalidate, post-check=0, pre-check=0, max-age=0")
 	w.Header().Set("expires", "0")
@@ -318,11 +315,12 @@ func loadConfig() {
 		os.Exit(-1)
 	}
 
-	defer jsonFile.Close()
+	defer jsonFile.Close() // whenever, close the file
 
+	// process the content of the config file
 	byteValue, _ := ioutil.ReadAll(jsonFile)
 	if err := json.Unmarshal(byteValue, &dcClients); err != nil {
-		_, _ = fmt.Fprint(os.Stderr, "%s\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "%s\n", err)
 	}
 }
 
@@ -362,7 +360,7 @@ func main() {
 	// establish the various handlers
 	http.HandleFunc("/boinc/", boincHandler)   // refresh clients
 	http.HandleFunc("/fah/", fahHandler)       // refresh clients
-	http.HandleFunc("/update/", updateHandler) // update API via POST
+	http.HandleFunc("/update", updateHandler)  // update API via POST
 	http.HandleFunc("/reload/", reloadHandler) // reload overall config and restart communication
 
 	// start the web server

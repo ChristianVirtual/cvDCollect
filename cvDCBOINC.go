@@ -304,15 +304,16 @@ func (client *BoincClient) connect() error {
 
 	adr := fmt.Sprintf("%s:%d", client.Ip, client.Port)
 
-	// if we have no connection, then try to connect
+	// if we have a connection, then jump back and leave it unchanged
 	if client.connection != nil {
 		return nil
 	}
 
+	client.ConnectionError = fmt.Errorf("connecting")
+
 	if client.Refresh < 1 {
 		client.Refresh = 10
 	}
-	fmt.Printf("open connection to %s\n", adr)
 	client.connection, err = net.DialTimeout("tcp", adr, 5*time.Second)
 
 	if err != nil {
@@ -322,22 +323,24 @@ func (client *BoincClient) connect() error {
 
 	passkey := client.Pwd
 	authMsg := &auth1{}
-	err = client.send(authMsg)
-	if err == nil {
-		nonceMsg := &nonce{}
-		_ = client.receive(nonceMsg)
-		password := nonceMsg.Nonce + passkey
-		calculated := md5.Sum([]byte(password))
-		var calculated2 = calculated[:]
-		err = client.send(&auth2{NonceHash: hex.EncodeToString(calculated2)})
-		if err == nil {
-			_ = client.receive(nil)
-		}
+	if err := client.send(authMsg); err != nil {
+		err = client.disconnect(err)
+		return err
 	}
 
-	if err != nil {
-		err = client.disconnect()
+	nonceMsg := &nonce{}
+	_ = client.receive(nonceMsg)
+	password := nonceMsg.Nonce + passkey
+	calculated := md5.Sum([]byte(password))
+	var calculated2 = calculated[:]
+	if err := client.send(&auth2{NonceHash: hex.EncodeToString(calculated2)}); err != nil {
+		return client.disconnect(err)
 	}
+	if err := client.receive(nil); err != nil {
+		return client.disconnect(err)
+	}
+
+	client.ConnectionError = nil
 
 	return err
 }
@@ -350,10 +353,14 @@ func (client *BoincClient) isConnected() bool {
 	return client.connection != nil
 }
 
-func (client *BoincClient) disconnect() error {
+func (client *BoincClient) disconnect(errIn error) error {
+	client.ConnectionError = errIn
+
+	if client.connection == nil {
+		return nil
+	}
 	err := client.connection.Close()
 	client.connection = nil
-	client.ConnectionError = err
 	return err
 }
 
@@ -447,16 +454,24 @@ func loadBoincStats() {
 			// get the reference
 			var client = &dcClients.BOINCConfig.Clients[idx]
 			// if we have no connection yet
-			if client.isConnected() == false {
-				// then open the connection
-				client.connect()
-				fmt.Printf("%s client %s (%s)\n", client.flavor(), client.Name, client.Ip)
+			go func() {
+				if client.isConnected() == false {
+					// then open the connection
+					err := client.connect()
+					if err != nil {
+						fmt.Printf("connect %s client %s (%s), error %s\n", client.flavor(), client.Name, client.Ip, err)
+					}
 
-				// and if successful start loading the data in background
-				if client.isConnected() == true {
-					go client.loadState()
+					// and if successful start loading the data in background
+					if client.isConnected() == true {
+						go func() {
+							client.loadState()
+						}()
+					} else {
+						_ = client.disconnect(err)
+					}
 				}
-			}
+			}()
 		}
 		// wait a period of time and try the client list again to connect those not yet connected
 		time.Sleep(20 * time.Second)

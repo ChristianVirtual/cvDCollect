@@ -82,6 +82,7 @@ func (client *FAHClient) connect() error {
 		return err
 	}
 
+	client.ConnectionError = fmt.Errorf("connecting")
 	fmt.Printf("open connection to %s\n", adr)
 	client.connection, err = net.DialTimeout("tcp", adr, 10*time.Second)
 
@@ -93,15 +94,10 @@ func (client *FAHClient) connect() error {
 	_ = client.receive(nil) // read the banner from the FAH Client
 
 	authMsg := fmt.Sprintf("auth %s\n", client.Pwd)
-	err = client.send(authMsg)
-	if err == nil {
-		_ = client.receive(nil)
+	if err = client.send(authMsg); err != nil {
+		return client.disconnect(err)
 	}
-	if err != nil {
-		err = client.disconnect()
-	}
-
-	return err
+	return client.receive(nil)
 }
 
 func (client *FAHClient) getConnection() *net.Conn {
@@ -112,10 +108,14 @@ func (client *FAHClient) isConnected() bool {
 	return client.connection != nil
 }
 
-func (client *FAHClient) disconnect() error {
+func (client *FAHClient) disconnect(errIn error) error {
+	client.ConnectionError = errIn
+
+	if client.connection == nil {
+		return nil
+	}
 	err := client.connection.Close()
 	client.connection = nil
-	client.ConnectionError = err
 	return err
 }
 
@@ -222,7 +222,9 @@ func loadFahStats() {
 
 				// and if successful start loading the data in background
 				if client.isConnected() == true {
-					go client.loadState()
+					go func() {
+						client.loadState()
+					}()
 				}
 			}
 		}
