@@ -6,12 +6,21 @@ table {
     width: 100%;
 }
 
+.table-condensed .progress {
+    margin-bottom: 0 !important;
+}
+
 td, th {
     border: 1px solid #dddddd;
     text-align: left;
     padding: 2px;
     font-size: 8pt;
 }
+
+td {
+    position: relative;
+}
+
 
 tr:nth-child(even) {
     background-color: #eeeeee;

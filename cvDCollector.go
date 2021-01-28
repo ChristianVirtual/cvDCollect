@@ -107,7 +107,7 @@ type FAHClient struct {
 // Global list for all DC clients
 var dcClients DCClients
 
-func loadStats(clients *Clients) {
+func loadStats(clients Client) {
 	// loop forever (in background) and fetch disconnected clients for reconnect
 	for true {
 		// go over the list of clients
@@ -338,7 +338,7 @@ func main() {
 	go func() {
 		loadFahStats()
 	}()
-	//go loadStats(&dcClients.FAHConfig.Clients)
+	//go loadStats(&dcClients.FAHConfig.Clients[0])
 	//	loadClientsState(&dcClients.FAHConfig.Clients)
 
 	fmt.Printf("%d BOINC clients in list\n", len(dcClients.BOINCConfig.Clients))

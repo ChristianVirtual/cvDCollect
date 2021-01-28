@@ -20,7 +20,7 @@ import (
 //
 
 //
-// BOINC Client Authentification
+// BOINC Client authorization
 //
 // first part of authorization with BOINC Client
 type auth1 struct {
@@ -100,12 +100,15 @@ type Result struct {
 	//
 	IsFinished                     bool
 	EstimatedTimeRemainingAsString string
+	FractionDoneAsString           string
 }
 
 type ActiveTask struct {
 	XMLName           xml.Name `xml:"active_task"`
 	TaskState         int      `xml:"active_task_state"`
 	CheckpointCPUTime float64  `xml:"checkpoint_cpu_time"`
+	FractionDone      float64  `xml:"fraction_done"`
+	CurrentCPUTime    float64  `xml:"current_cpu_time"`
 	ElapsedTime       float64  `xml:"elapsed_time"`
 	WorkingSetSize    float64  `xml:"working_set_size"`
 	ProgressRate      float64  `xml:"progress_rate"`
@@ -432,6 +435,7 @@ func (client *BoincClient) loadState() {
 				var result = &client.ClientStateReply.ClientState.Results[idx]
 				// do some conversions once loaded
 				convertResultToDHMS(result)
+				result.FractionDoneAsString = fmt.Sprintf("%3.1f%%", 100*result.Activetask.FractionDone)
 				result.IsFinished = result.EstimatedTimeRemaining == 0
 			}
 		}
